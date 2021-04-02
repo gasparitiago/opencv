@@ -51,10 +51,20 @@ int rotatedRectangleIntersection( const RotatedRect& rect1, const RotatedRect& r
 {
     CV_INSTRUMENT_REGION();
 
-    // L2 metric
-    const float samePointEps = std::max(1e-16f, 1e-6f * (float)std::max(rect1.size.area(), rect2.size.area()));
+    // Shift rectangles closer to origin (0, 0) to improve the calculation of the intesection region
+    // To do that, the average center of the rectangles is moved to the origin
+    const auto averageCenter = (rect1.center + rect2.center) / 2.0f;
+    RotatedRect shiftedRect1(rect1);
+    RotatedRect shiftedRect2(rect2);
 
-    if (rect1.size.empty() || rect2.size.empty())
+    // Move rectangles closer to origin
+    shiftedRect1.center -= averageCenter;
+    shiftedRect2.center -= averageCenter;
+
+    // L2 metric
+    const float samePointEps = std::max(1e-16f, 1e-6f * (float)std::max(shiftedRect1.size.area(), shiftedRect2.size.area()));
+
+    if (shiftedRect1.size.empty() || shiftedRect2.size.empty())
     {
         intersectingRegion.release();
         return INTERSECT_NONE;
@@ -65,12 +75,12 @@ int rotatedRectangleIntersection( const RotatedRect& rect1, const RotatedRect& r
 
     std::vector <Point2f> intersection; intersection.reserve(24);
 
-    rect1.points(pts1);
-    rect2.points(pts2);
+    shiftedRect1.points(pts1);
+    shiftedRect2.points(pts2);
 
     int ret = INTERSECT_FULL;
 
-    // Specical case of rect1 == rect2
+    // Specical case of shiftedRect1 == shiftedRect2
     {
         bool same = true;
 
@@ -150,7 +160,7 @@ int rotatedRectangleIntersection( const RotatedRect& rect1, const RotatedRect& r
         ret = INTERSECT_PARTIAL;
     }
 
-    // Check for vertices from rect1 inside recct2
+    // Check for vertices from shiftedRect1 inside shiftedRect2
     for( int i = 0; i < 4; i++ )
     {
         // We do a sign test to see which side the point lies.
@@ -188,7 +198,7 @@ int rotatedRectangleIntersection( const RotatedRect& rect1, const RotatedRect& r
         }
     }
 
-    // Reverse the check - check for vertices from rect2 inside recct1
+    // Reverse the check - check for vertices from shiftedRect2 inside shiftedRect1
     for( int i = 0; i < 4; i++ )
     {
         // We do a sign test to see which side the point lies.
@@ -300,6 +310,14 @@ int rotatedRectangleIntersection( const RotatedRect& rect1, const RotatedRect& r
     }
 
     intersection.resize(N);
+
+    // Move intersection to the original position of rect1 and rect2
+    for (auto &point : intersection)
+    {
+        point.x += averageCenter.x;
+        point.y += averageCenter.y;
+    }
+
     Mat(intersection).copyTo(intersectingRegion);
 
     return ret;
